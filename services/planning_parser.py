@@ -1,11 +1,24 @@
-from models.journee_service import JourneeService
+from models.planning_item import PlanningItem
 
 
-def lire_planning(texte: str):
+def lire_planning(texte: str) -> list[PlanningItem]:
+    """
+    Lit le planning saisi par l'utilisateur.
+
+    Format attendu :
+        27/07/2026 J481A
+
+    Les espaces multiples et tabulations sont acceptés.
+    Les lignes invalides sont ignorées.
+    Les codes sont normalisés en majuscules.
+    """
 
     resultat = []
 
-    for ligne in texte.splitlines():
+    if not texte:
+        return resultat
+
+    for numero_ligne, ligne in enumerate(texte.splitlines(), start=1):
 
         ligne = ligne.strip()
 
@@ -17,10 +30,13 @@ def lire_planning(texte: str):
         if len(morceaux) < 2:
             continue
 
+        date = morceaux[0].strip()
+        code = morceaux[1].strip().upper()
+
         resultat.append(
-            JourneeService(
-                date=morceaux[0],
-                code=morceaux[1]
+            PlanningItem(
+                date=date,
+                code=code
             )
         )
 
