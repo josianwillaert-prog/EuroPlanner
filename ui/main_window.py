@@ -10,13 +10,18 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QListWidget,
     QTextEdit,
+    QMessageBox,
 )
+
+from services.calendar_generator import creer_calendrier
 
 
 class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
+
+        self.catalogues = []
 
         self.setWindowTitle("🚄 EuroPlanner")
         self.resize(1000, 700)
@@ -26,8 +31,6 @@ class MainWindow(QMainWindow):
 
         layout = QVBoxLayout()
         central.setLayout(layout)
-
-        # ---------- TITRE ----------
 
         titre = QLabel("🚄 EuroPlanner")
         titre.setStyleSheet("""
@@ -40,11 +43,9 @@ class MainWindow(QMainWindow):
         layout.addWidget(titre)
         layout.addWidget(sous_titre)
 
-        # ---------- CONTENU ----------
-
         contenu = QHBoxLayout()
 
-        # ===== COLONNE GAUCHE =====
+        # -------- Catalogues --------
 
         gauche = QVBoxLayout()
 
@@ -58,7 +59,7 @@ class MainWindow(QMainWindow):
         gauche.addWidget(self.liste_catalogues)
         gauche.addWidget(bouton_catalogues)
 
-        # ===== COLONNE DROITE =====
+        # -------- Planning --------
 
         droite = QVBoxLayout()
 
@@ -83,8 +84,6 @@ class MainWindow(QMainWindow):
 
         layout.addLayout(contenu)
 
-        # ---------- STATUT ----------
-
         self.label_statut = QLabel("Prêt.")
         layout.addWidget(self.label_statut)
 
@@ -100,19 +99,50 @@ class MainWindow(QMainWindow):
         if not fichiers:
             return
 
+        self.catalogues = fichiers
+
         self.liste_catalogues.clear()
 
         for fichier in fichiers:
             self.liste_catalogues.addItem(os.path.basename(fichier))
 
-        self.label_statut.setText(f"{len(fichiers)} catalogue(s) chargé(s).")
+        self.label_statut.setText(
+            f"{len(fichiers)} catalogue(s) chargé(s)."
+        )
 
     def creer_calendrier(self):
 
-        texte = self.zone_planning.toPlainText()
+        texte = self.zone_planning.toPlainText().strip()
 
-        nb_lignes = len([l for l in texte.splitlines() if l.strip()])
+        if not texte:
+            QMessageBox.warning(
+                self,
+                "Planning vide",
+                "Veuillez saisir un planning."
+            )
+            return
 
-        self.label_statut.setText(
-            f"{nb_lignes} journée(s) saisie(s)."
-        )
+        try:
+
+            nb = creer_calendrier(
+                texte,
+                "Planning.ics"
+            )
+
+            self.label_statut.setText(
+                f"Planning.ics créé ({nb} journée(s))."
+            )
+
+            QMessageBox.information(
+                self,
+                "Succès",
+                "Le fichier Planning.ics a été créé."
+            )
+
+        except Exception as e:
+
+            QMessageBox.critical(
+                self,
+                "Erreur",
+                str(e)
+            )
