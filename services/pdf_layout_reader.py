@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import pdfplumber
 
 
-@dataclass
+@dataclass(slots=True)
 class PageWord:
     text: str
     page: int
@@ -13,15 +13,16 @@ class PageWord:
     bottom: float
 
 
-@dataclass
+@dataclass(slots=True)
 class PageLine:
     page: int
     top: float
+    bottom: float
     words: list[PageWord]
 
     @property
     def text(self) -> str:
-        return " ".join(word.text for word in self.words)
+        return " ".join(w.text for w in self.words)
 
 
 def lire_mots(pdf_path: str) -> list[PageWord]:
@@ -32,82 +33,84 @@ def lire_mots(pdf_path: str) -> list[PageWord]:
 
         for numero_page, page in enumerate(pdf.pages, start=1):
 
-            mots = page.extract_words(
+            for mot in page.extract_words(
                 use_text_flow=True,
                 keep_blank_chars=False,
-            )
-
-            for mot in mots:
+            ):
 
                 resultat.append(
                     PageWord(
                         text=mot["text"],
                         page=numero_page,
-                        x0=mot["x0"],
-                        x1=mot["x1"],
-                        top=mot["top"],
-                        bottom=mot["bottom"],
+                        x0=float(mot["x0"]),
+                        x1=float(mot["x1"]),
+                        top=float(mot["top"]),
+                        bottom=float(mot["bottom"]),
                     )
                 )
 
     return resultat
 
 
-def lire_lignes(pdf_path: str) -> list[PageLine]:
-
-    mots = lire_mots(pdf_path)
+def regrouper_par_ligne(
+    mots: list[PageWord],
+    tolerance: float = 2.0,
+) -> list[PageLine]:
 
     lignes = []
 
-    courant = []
-
-    page = None
-    top = None
-
-    for mot in mots:
+    for mot in sorted(
+        mots,
+        key=lambda m: (m.page, m.top, m.x0),
+    ):
 
         if (
-            page != mot.page
-            or top is None
-            or abs(mot.top - top) > 2
+            not lignes
+            or lignes[-1].page != mot.page
+            or abs(lignes[-1].top - mot.top) > tolerance
         ):
 
-            if courant:
-                lignes.append(
-                    PageLine(
-                        page=page,
-                        top=top,
-                        words=courant,
-                    )
+            lignes.append(
+                PageLine(
+                    page=mot.page,
+                    top=mot.top,
+                    bottom=mot.bottom,
+                    words=[mot],
                 )
-
-            courant = [mot]
-            page = mot.page
-            top = mot.top
+            )
 
         else:
 
-            courant.append(mot)
+            ligne = lignes[-1]
 
-    if courant:
-        lignes.append(
-            PageLine(
-                page=page,
-                top=top,
-                words=courant,
+            ligne.words.append(mot)
+            ligne.bottom = max(
+                ligne.bottom,
+                mot.bottom,
             )
-        )
+
+    for ligne in lignes:
+        ligne.words.sort(key=lambda m: m.x0)
 
     return lignes
 
 
-def lire_catalogues(fichiers: list[str]) -> list[PageLine]:
+def lire_lignes(pdf_path: str) -> list[PageLine]:
 
-    resultat = []
+    return regrouper_par_ligne(
+        lire_mots(pdf_path)
+    )
+
+
+def lire_catalogues(
+    fichiers: list[str],
+) -> list[PageLine]:
+
+    lignes = []
 
     for fichier in fichiers:
-        resultat.extend(
+        lignes.extend(
             lire_lignes(fichier)
         )
 
-    return resultat
+    return lignes
