@@ -8,16 +8,38 @@ from services.pdf_layout_reader import PageWord
 class DiagramFactory:
     def __init__(self, locator: DiagramLocator | None = None):
         self.locator = locator or DiagramLocator()
+        # State populated by create_diagrams()
+        self.diagrams: list[Diagram] = []
+        self.unassigned_words: list[PageWord] = []
+        self.diagnostics: dict = {}
+        self.statistics: dict = {}
 
     def create_diagrams(self, mots: list[PageWord]) -> list[Diagram]:
         locations = self.locator.locate(mots)
+        # initialize per-run state
+        self.diagrams = []
+        self.unassigned_words = []
+        self.diagnostics = {}
+        self.statistics = {}
+
         if not locations:
+            # No diagram locations: everything is unassigned
+            self.unassigned_words = list(mots)
+            self.statistics = {
+                "total_words": len(mots),
+                "diagrams": 0,
+                "assigned": 0,
+                "unassigned": len(mots),
+            }
             return []
 
         mots_by_page = self._group_by_page(mots)
         locations_by_page = self._group_locations_by_page(locations)
 
         diagrams: list[Diagram] = []
+        # track assignment by object id to guarantee partitioning
+        assigned_ids: set[int] = set()
+        attempted_double_assignments = 0
 
         for page, page_locations in locations_by_page.items():
             page_words = mots_by_page.get(page, [])
@@ -54,14 +76,44 @@ class DiagramFactory:
                         if start_top <= word.top < end_top
                     )
 
-                    if diagram_words:
-                        diagrams.append(
-                            Diagram(
-                                code=location.code,
-                                page=page,
-                                mots=diagram_words,
-                            )
-                        )
+                    # filter out words already assigned to another diagram
+                    filtered = []
+                    for w in diagram_words:
+                        if id(w) in assigned_ids:
+                            attempted_double_assignments += 1
+                            continue
+                        filtered.append(w)
+
+                    if filtered:
+                        # create diagram with words that are not yet assigned
+                        diag = Diagram(code=location.code, page=page, mots=tuple(filtered))
+                        diagrams.append(diag)
+                        # mark assigned
+                        for w in filtered:
+                            assigned_ids.add(id(w))
+
+        # Build unassigned list preserving original order
+        self.diagrams = diagrams
+        unassigned = [w for w in mots if id(w) not in assigned_ids]
+        self.unassigned_words = unassigned
+
+        # Diagnostics and statistics
+        self.diagnostics = {
+            "attempted_double_assignments": attempted_double_assignments,
+            "locations_found": len(locations),
+            "columns_processed": sum(1 for _ in locations),
+        }
+
+        self.statistics = {
+            "total_words": len(mots),
+            "diagrams": len(diagrams),
+            "assigned": len(mots) - len(unassigned),
+            "unassigned": len(unassigned),
+        }
+
+        # Invariants (sanity checks) — keep as diagnostics but do not raise
+        # 1) partition: assigned U unassigned == input
+        # 2) disjointness ensured by assigned_ids usage
 
         return diagrams
 

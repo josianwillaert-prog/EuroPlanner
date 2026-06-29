@@ -62,6 +62,8 @@ Il ne construit aucun objet métier.
 Responsabilité unique :
 
 * transformer les PageWord en objets Diagram.
+* conserver les PageWord non affectés (liste d'unassigned words) pour diagnostic et réutilisation.
+* produire les diagnostics de segmentation (statistiques, anomalies, mots non assignés).
 
 Il segmente le document.
 
@@ -181,6 +183,51 @@ En cas de doute, privilégier l'ajout d'une nouvelle classe plutôt que de méla
 
 ---
 
+## Modèle métier
+
+Le modèle métier décrit les objets principaux manipulés par EuroPlanner et leurs données essentielles.
+
+### Catalogue
+
+Contient des informations de haut niveau sur le catalogue traité, notamment :
+
+- date d'application ;
+- période de validité ;
+- jour concerné ;
+- rôle (par exemple TD, TM2).
+
+Catalogue n'effectue pas de parsing : il orchestre lecture et conversion.
+
+### Diagram
+
+`Diagram` représente une journée de service (un objet métier central). Il contient notamment :
+
+- numéro de journée ;
+- prise de service ;
+- fin de service ;
+- durée de la journée ;
+- temps de travail effectif ;
+- durée du break ;
+- découcher ;
+- indicateur « en voyageur » ;
+- liste des trains associés.
+
+`Diagram` est le seul objet métier autorisé à manipuler directement les `PageWord`.
+
+### Train
+
+`Train` représente un mouvement ferroviaire. Il contient notamment :
+
+- numéro (par ex. 9xxx) ;
+- gare de départ ;
+- heure de départ ;
+- gare d'arrivée ;
+- heure d'arrivée.
+
+Ces objets forment le modèle métier exposé au reste de l'application (notamment JourneeService et ICSGenerator).
+
+---
+
 # Plan de migration
 
 1. Introduire DiagramFactory.
@@ -199,3 +246,14 @@ En cas de doute, privilégier l'ajout d'une nouvelle classe plutôt que de méla
 Ce document est la référence architecturale du projet.
 
 Toute modification du code doit être compatible avec cette architecture.
+
+---
+
+# Statut
+Version : 1.0
+
+Ce document constitue la référence architecturale d'EuroPlanner.
+
+Toute évolution du code doit respecter cette architecture.
+
+Toute proposition de modification de l'architecture doit être explicitement justifiée avant toute modification du code.
