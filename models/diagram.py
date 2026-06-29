@@ -1,8 +1,8 @@
 from dataclasses import dataclass, field
 
+from services.geometry_reader import GeometryReader
 from services.pdf_layout_reader import PageWord
 from typing import Optional, List
-import re
 
 
 @dataclass(slots=True, frozen=True)
@@ -14,6 +14,8 @@ class Diagram:
     x_max: float = field(init=False)
     y_min: float = field(init=False)
     y_max: float = field(init=False)
+    _cache: dict = field(init=False, repr=False, compare=False, default_factory=dict)
+    _index: Optional[dict] = field(init=False, repr=False, compare=False, default=None)
 
     def __post_init__(self):
         mots = tuple(self.mots)
@@ -65,16 +67,7 @@ class Diagram:
         cache[key] = val
         return val
 
-    _TIME_RE = re.compile(r"^([0-2]?\d):([0-5]\d)$")
-
-    @staticmethod
-    def _parse_time_token(token: str) -> Optional[int]:
-        m = Diagram._TIME_RE.match(token)
-        if not m:
-            return None
-        h = int(m.group(1))
-        m12 = int(m.group(2))
-        return h * 60 + m12
+    _geometry_reader = GeometryReader()
 
     def __len__(self) -> int:
         return len(self.mots)
@@ -88,10 +81,42 @@ class Diagram:
     def _find_book_on_section(self):
         """Locate the section likely containing book-on information.
 
-        Returns a lightweight descriptor or None. Placeholder — no heuristics.
+        Returns a lightweight descriptor or None.
         """
         self._ensure_index()
+
+        mots = sorted(self.mots, key=lambda m: (m.top, m.x0))
+
+        for reference in mots:
+            label = reference.text.lower().rstrip(":")
+            if label in {"book-on", "book on", "bookon", "book on:" , "book-on:" , "start", "service", "start of service"}:
+                return reference
+
         return None
+
+    @property
+    def book_on(self) -> Optional[str]:
+        def compute():
+            reference = self._find_book_on_section()
+            if reference is None:
+                return None
+
+            time_text = self._geometry_reader.premier_horaire_a_droite(
+                list(self.mots),
+                reference,
+                delta_y=20,
+            )
+
+            if not time_text:
+                return None
+
+            if len(time_text) == 8 and time_text.count(":") == 2:
+                parts = time_text.split(":")
+                time_text = f"{parts[0].zfill(2)}:{parts[1].zfill(2)}"
+
+            return time_text
+
+        return self._cache_get("book_on", compute)
 
     def _find_book_off_section(self):
         """Locate the section likely containing book-off information."""
